@@ -27,19 +27,31 @@ class methods():
     @staticmethod
     def shut_down(ipcon, ser):
         ipcon.disconnect() # disconnect IP Connection
+        methods.send_ser_msg(ser, b"SOUT0\r")
         ser.close()
 
     @staticmethod
-    def check_for_ok(ser):
-        time.sleep(0.01)
-        start = time.perf_counter()
-        t = 0
-        while ser.read() not in [b"OK\r", b"OK\r\n", b"OK\n", b"O", b"K", b"\r"] or t > 5:
-            time.sleep(0.01)
-            t = time.perf_counter() - start
-            if t > 5:
-                raise Exception("No response to serial command")
-        print("Checked")
+    def send_ser_msg(ser, msg):
+        rec_count = 0
+        ok_received = False
+        ser.write(msg)
+        while ok_received == False:
+            start = time.perf_counter()
+            returned_msg = []
+            while returned_msg[-1:] != [b"\r"] and time.perf_counter() - start < 10:
+                returned_msg.append(ser.read())
+                print(returned_msg)
+                t = time.perf_counter()
+            
+            if b"O" in returned_msg and b"K" in returned_msg:
+                print("OK received!")
+                ok_received = True
+                return None
+            returned_msg = []
+            rec_count += 1
+
+            if rec_count > 3:
+                raise TimeoutError("No OK received")
 
     @staticmethod
     def monitor(flag):

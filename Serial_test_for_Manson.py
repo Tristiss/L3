@@ -14,33 +14,25 @@ UID_analog_in = "27hk"
 num = 5
 
 data =[]
-mes_voltages = []
 
 def set_voltage(volt):
     # volt [V]
     volt = int(volt * 100) # convert V to mV
     msg = f"VOLT3{volt:04d}\r"
-    ser.write(msg.encode())
+    methods.send_ser_msg(ser, msg.encode())
     print(msg[5:])
-    mes_voltages.append(msg[5:])
-    methods.check_for_ok(ser)
     time.sleep(1)
     if volt == 0:
-        time.sleep(10)
+        time.sleep(9)
 
 ipcon, analog_in, ser = methods.setup(port, UID_analog_in)
 
 analog_in.set_oversampling(BrickletAnalogInV3.OVERSAMPLING_16384)
 
-ser.write(b"SABC3\r")
-methods.check_for_ok(ser)
-ser.write(b"ENDS\r")
-methods.check_for_ok(ser)
-ser.write(b"SOCP0100\r")
-methods.check_for_ok(ser)
-
-ser.write(b"SOUT1\r")
-methods.check_for_ok(ser)
+methods.send_ser_msg(ser, b"SABC3\r")
+methods.send_ser_msg(ser, b"ENDS\r")
+methods.send_ser_msg(ser, b"SOCP0100\r")
+methods.send_ser_msg(ser, b"SOUT1\r")
 
 for i in voltages:
     set_voltage(i)
@@ -50,8 +42,6 @@ for i in voltages:
     data.append(mes_volt)
 
 set_voltage(0)
-
-ser.write(b"SOUT0\r")
 
 methods.shut_down(ipcon, ser)
 
