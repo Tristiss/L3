@@ -21,16 +21,21 @@ u_current = 10
 def u_voltage(volt):
     return volt * 0.001 + 0.05
 
-def single_evaluation(num, axs, rev_bias, ax_3d):
-    if num == 5:
-        df = pd.read_csv(rf"C:\Programmieren\Praktikum\L3\Data\Messung_{num}.csv", names = ["voltages", "currents"], sep = ";")    
-        voltages = list(df["voltages"][1:])
-        currents = list(df["currents"][1:])
+def single_evaluation(num, axs, rev_bias, ax_3d, og_kind = True):
+    if og_kind == True:
+        if num == 5:
+            df = pd.read_csv(rf"C:\Programmieren\Praktikum\L3\Data\Messung_{num}.csv", names = ["voltages", "currents"], sep = ";")    
+            voltages = list(df["voltages"][1:])
+            currents = list(df["currents"][1:])
+        else:
+            df = pd.read_csv(rf"C:\Programmieren\Praktikum\L3\Data\Messung_{num}.csv", sep = ";")
+            voltages = list(df["voltages"])
+            currents = list(df["currents"])
     else:
-        df = pd.read_csv(rf"C:\Programmieren\Praktikum\L3\Data\Messung_{num}.csv", sep = ";")
+        df = pd.read_csv(rf"C:\Programmieren\Praktikum\L3\Data\Messung_rev_bias_{rev_bias}_{num}.csv", sep = ";")
         voltages = list(df["voltages"])
         currents = list(df["currents"])
-
+    
     spl = make_smoothing_spline(voltages, currents)
 
     x = np.linspace(voltages[0], voltages[-1], 10000)
@@ -60,10 +65,10 @@ def single_evaluation(num, axs, rev_bias, ax_3d):
 
     print(energy)
 
-    axs.errorbar(voltages, currents, xerr = u_volt, yerr = u_current, capsize= 3, label = f"Roh {rev_bias}")
-    axs.plot(x, smoothed_data, label = f"Geglättet {rev_bias}")
-    ax_3d.plot(x, smoothed_data, zs=rev_bias, zdir='z', label='curve in (x, y)')
-    axs.errorbar(volt_peaks, curr_peaks, xerr = u_volt_peak, yerr = u_volt_peak, capsize = 3, fmt = "o", label = f"Peaks {rev_bias}")
+    axs.errorbar(voltages, currents, xerr = u_volt, yerr = u_current, capsize= 3, label = f"Roh {round(rev_bias,2)}")
+    axs.plot(x, smoothed_data, label = f"Spline {round(rev_bias,2)}")
+    ax_3d.plot(x, smoothed_data, zs=rev_bias, zdir='z')
+    axs.errorbar(volt_peaks, curr_peaks, xerr = u_volt_peak, yerr = u_volt_peak, capsize = 3, fmt = "o", label = f"Peaks {round(rev_bias,2)}")
 
     return energy
 
@@ -88,7 +93,22 @@ if __name__ == "__main__":
 
     for i in reverse_bias_num.keys():
         energy = single_evaluation(reverse_bias_num[i], axs, i, ax_3d)
-        axs_diff.errorbar(i, energy[0], yerr = energy[1], capsize = 3, fmt = "o", label = f"{i} A") #xerr = 0.5 * (2 * np.sqrt(6)),
+        axs_diff.errorbar(i, energy[0], yerr = energy[1], capsize = 3, fmt = "o", label = f"{round(i,2)} A") #xerr = 0.5 * (2 * np.sqrt(6)),
+
+    rev_biases = [
+        0.0,
+        1.1111111111111112,
+        2.2222222222222223,
+        3.3333333333333335,
+        4.4444444444444445,
+        5.5555555555555555,
+        6.6666666666666667,
+        7.777777777777779
+    ]
+
+    for i in rev_biases:
+        energy = single_evaluation(13, axs, i, ax_3d, og_kind = False)
+        axs_diff.errorbar(i, energy[0], yerr = energy[1], capsize = 3, fmt = "o", label = f"{round(i,2)} A") #xerr = 0.5 * (2 * np.sqrt(6)),
 
     # edit style for plots
     axs.legend(loc = 2, ncol = 3)
@@ -100,7 +120,7 @@ if __name__ == "__main__":
         fig.savefig(fname = rf"Alle_Messungen_v1.pdf", format = "pdf")
 
     # edit style for plots
-    axs_diff.legend(loc = 2, ncol = 2)
+    axs_diff.legend(loc = 4, ncol = 2)
     axs_diff.grid()
     axs_diff.set_xlabel(r'Gegenspannung $U_G$ [V]')
     axs_diff.set_ylabel(r'Kinetische Energie $E$ [eV]')
