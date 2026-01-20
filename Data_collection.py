@@ -12,7 +12,7 @@ voltages = np.linspace(20, 50, 100)
 port = "COM6"
 UID_analog_in = "27hk"
 
-num = 5
+num = 13
 
 data = []
 
@@ -36,9 +36,9 @@ def main():
     methods.send_ser_msg(ser, b"SOCP0100\r")
     methods.send_ser_msg(ser, b"SOUT1\r")
 
-    monitor_thread = threading.Thread(target = methods.monitor, daemon = True)
-    monitor_thread.start()
     flag = threading.Event()
+    monitor_thread = threading.Thread(target = methods.monitor, args = [flag,], daemon = True)
+    monitor_thread.start()
 
     def measure():
         for i in voltages:
@@ -62,11 +62,11 @@ def main():
     finally:
         methods.shut_down(ipcon, ser)
 
-    df = pd.DataFrame({"voltages": voltages, "currents": data})
+    df = pd.DataFrame({"voltages": voltages[:len(data)], "currents": data})
 
-    df.to_csv(fr"C:\Programmieren\Praktikum\L3\Messung_{num}.csv", sep = ";")
+    df.to_csv(fr"C:\Programmieren\Praktikum\L3\Data\Messung_{num}.csv", sep = ";")
 
-    df.plot()
+    plt.plot(df["voltages"], df["currents"])
 
     plt.show()
 
