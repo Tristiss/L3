@@ -1,33 +1,74 @@
-import numpy as np
+import time
 import threading
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from tinkerforge.bricklet_analog_in_v3 import BrickletAnalogInV3
+
 from Static_methods_L3 import *
+
+voltages = np.linspace(20, 50, 100)
 
 port = "COM6"
 UID_analog_in = "27hk"
 
+num = 5
 
-def measurement():
-    pass
+data = []
 
-def measurement_row():
-    pass
-
-flag = threading.Event()
-monitor = threading.Thread(methods.monitor, daemon = True)
+def set_voltage(ser, volt):
+    # volt [V]
+    volt = int(volt * 100) # convert V to mV
+    msg = f"VOLT3{volt:04d}\r"
+    methods.send_ser_msg(ser, msg.encode())
+    print(msg[5:])
+    time.sleep(1)
+    if volt == 0:
+        time.sleep(9)
 
 def main():
     ipcon, analog_in, ser = methods.setup(port, UID_analog_in)
 
-    measure = threading.Thread(measurement_row)
-    measure.start()
+    analog_in.set_oversampling(BrickletAnalogInV3.OVERSAMPLING_16384)
+
+    methods.send_ser_msg(ser, b"SABC3\r")
+    methods.send_ser_msg(ser, b"ENDS\r")
+    methods.send_ser_msg(ser, b"SOCP0100\r")
+    methods.send_ser_msg(ser, b"SOUT1\r")
+
+    monitor_thread = threading.Thread(target = methods.monitor, daemon = True)
+    monitor_thread.start()
+    flag = threading.Event()
+
+    def measure():
+        for i in voltages:
+            set_voltage(ser, i)
+            mes_volt = analog_in.get_voltage()
+            time.sleep(0.5)
+            print(mes_volt)
+            data.append(mes_volt)
+            if flag.is_set() == True:
+                break
+
+    measure_thread = threading.Thread(target = measure)
+    measure_thread.start()
 
     try:
-        measure.join()
+        measure_thread.join()
     except:
-        methods.shut_down(ipcon, ser)
-        print("Measurement failed")
+        pass
+    else:
+        set_voltage(ser, 0)
     finally:
         methods.shut_down(ipcon, ser)
+
+    df = pd.DataFrame({"voltages": voltages, "currents": data})
+
+    df.to_csv(fr"C:\Programmieren\Praktikum\L3\Messung_{num}.csv", sep = ";")
+
+    df.plot()
+
+    plt.show()
 
 if __name__ == "__main__":
     main()
