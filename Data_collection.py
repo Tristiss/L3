@@ -1,5 +1,6 @@
 import time
 import threading
+import serial
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -8,12 +9,12 @@ from tinkerforge.bricklet_analog_in_v3 import BrickletAnalogInV3
 from Static_methods_L3 import *
 
 voltages = np.linspace(20, 50, 100)
-reverse_bias = np.linspace(0, 5, 50)
+reverse_bias = np.linspace(0, 5, 8)
 
 port = "COM6"
 UID_analog_in = "27hk"
 
-num = 13
+num = 15
 
 def set_voltage(ser, volt):
     # volt [V]
@@ -26,21 +27,18 @@ def set_voltage(ser, volt):
         time.sleep(9)
 
 def main():
-    ipcon, analog_in, ser = methods.setup(port, UID_analog_in)
+    fig, axs = plt.subplots()
 
-    ser_reverse_bias = serial.Serial("COM5", baudrate = 9600)
+    ipcon, analog_in = methods.setup(UID_analog_in) # initiate IP connection with Tinkerforge Hardware
+
+    # establish serial communication for both Manson devices
+    ser = serial.Serial(port, baudrate = 9600)
+    ser_reverse_bias = serial.Serial("COM8", baudrate = 9600)
 
     analog_in.set_oversampling(BrickletAnalogInV3.OVERSAMPLING_16384)
 
-    methods.send_ser_msg(ser, b"SABC3\r")
-    methods.send_ser_msg(ser, b"ENDS\r")
-    methods.send_ser_msg(ser, b"SOCP0100\r")
-    methods.send_ser_msg(ser, b"SOUT1\r")
-
-    methods.send_ser_msg(ser_reverse_bias, b"SABC3\r")
-    methods.send_ser_msg(ser_reverse_bias, b"ENDS\r")
-    methods.send_ser_msg(ser_reverse_bias, b"SOCP0100\r")
-    methods.send_ser_msg(ser_reverse_bias, b"SOUT1\r")
+    methods.manson_init(ser)
+    methods.manson_init(ser_reverse_bias)
 
     flag = threading.Event()
     monitor_thread = threading.Thread(target = methods.monitor, args = [flag,], daemon = True)
@@ -60,7 +58,7 @@ def main():
                     return None
             df = pd.DataFrame({"voltages": voltages[:len(data)], "currents": data})
             df.to_csv(fr"C:\Programmieren\Praktikum\L3\Data\Messung_rev_bias_{j}_{num}.csv", sep = ";")
-            plt.plot(df["voltages"], df["currents"])
+            axs.plot(df["voltages"], df["currents"])
             set_voltage(ser, 0)
 
     measure_thread = threading.Thread(target = measure)
@@ -73,7 +71,7 @@ def main():
     else:
         set_voltage(ser, 0)
     finally:
-        methods.shut_down(ipcon, ser)
+        methods.shut_down(ipcon, [ser, ser_reverse_bias])
 
     plt.show()
 
