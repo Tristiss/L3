@@ -1,9 +1,10 @@
 import locale
-import scipy.constants as constants
+import math
 import numpy as np
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib import ticker
 from scipy.signal import find_peaks
 from scipy.interpolate import make_smoothing_spline
 from os import listdir
@@ -15,8 +16,7 @@ mpl.rcParams.update(mpl.rcParamsDefault)
 
 locale.setlocale(locale.LC_ALL, 'de_DE.UTF-8')
 
-num = 11
-test_phase = True
+test_phase = False
 
 path = r"C:\Programmieren\Praktikum\L3\Data"
 
@@ -68,7 +68,7 @@ k = {
 def u_voltage(volt):
     return volt * 0.001 + 0.05
 
-def weighted_mean(values, uncertainties):
+def weighted_mean(values:list[float], uncertainties:list[float]) ->float:
     if len(values) != len(uncertainties):
         raise ArithmeticError("Miss match in val and unc length")
     upper = lower = 0
@@ -78,18 +78,18 @@ def weighted_mean(values, uncertainties):
 
     return upper / lower
 
-def unc_sum(uncertainties):
+def unc_sum(uncertainties:list[float]) -> float:
     lower = 0
     for i in uncertainties:
         lower += 1 / np.square(i)
     return lower
 
-def internal_unc_type_a(uncertainties):
+def internal_unc_type_a(uncertainties:list[float]) -> float:
     lower = unc_sum(uncertainties)
     n = len(uncertainties)
     return k[n - 1] * np.sqrt(1 / lower) / np.sqrt(n)
 
-def external_unc_type_a(values, uncertainties, weighted_mean):
+def external_unc_type_a(values:list[float], uncertainties:list[float], weighted_mean:float) -> float:
     n = len(uncertainties)
     if len(values) != n:
         raise ArithmeticError("Miss match in val and unc length")
@@ -99,19 +99,23 @@ def external_unc_type_a(values, uncertainties, weighted_mean):
         upper += np.square(values[i] - weighted_mean) / uncertainties[i]
     return k[n - 1] / np.sqrt(n) * np.sqrt(upper / ((len(values) - 1) * lower))
 
-def weigted_type_a_unc(values, uncertainties):
+def weigted_type_a_unc(values:list[float], uncertainties:list[float]) -> list[float]:
     mean = weighted_mean(values, uncertainties)
     internal = internal_unc_type_a(uncertainties)
     external = external_unc_type_a(values, uncertainties, mean)
     return [mean, max(internal, external)]
 
-def csv_read(filename):
+def normal_type_a_unc(values:list[float]) -> float:
+    n = len(values)
+    return k[n - 1] * np.std(values) / np.sqrt(n)
+
+def csv_read(filename:str) -> tuple[list, list]:
     df = pd.read_csv(path + r"\\" + filename, sep = ";")
     voltages = list(df["voltages"])
     currents = list(df["currents"])
     return voltages, currents
 
-def single_evaluation(voltages, currents, axs, rev_bias, ax_3d):
+def single_evaluation(voltages:list[float], currents:list[float], axs, rev_bias:float, ax_3d):
     spl = make_smoothing_spline(voltages, currents)
 
     u_volt = [u_voltage(i) for i in voltages]
@@ -157,22 +161,28 @@ def single_evaluation(voltages, currents, axs, rev_bias, ax_3d):
 
         n = len(diff)
         type_b = 0
-        for i in u_diff:
+        for i in u_diff: # this type of for loop could be replaced with np.sum
             type_b += np.square(i)
-        u_diff_val = np.sqrt(np.square((k[n - 1] * np.std(diff) / np.sqrt(n))) + type_b / np.square(len(u_diff)))
+        u_diff_val = np.sqrt(np.square(normal_type_a_unc(diff)) + type_b / np.square(len(u_diff)))
         
-        energy = [np.mean(diff), u_diff_val]
+        energy = [np.mean(diff), u_diff_val, diff]
 
-        print(energy)
         axs.errorbar(volt_peaks, curr_peaks, xerr = u_volt_peak, yerr = u_current, capsize = 3, fmt = "o", label = f"Peaks {round(rev_bias,2)}")
         axs.errorbar(volt_valleys, curr_valleys, fmt = "o", label = f"Valleys {round(rev_bias,2)}")
 
         if len(peaks) == len(valleys):
             contrast = [(curr_peaks[i] - curr_valleys[i]) / (curr_peaks[i] + curr_valleys[i]) for i in range(len(peaks))]
-            contrast = [np.mean(contrast), np.std(contrast)]
-            return energy, contrast
-        return energy, "Nan"
-    return "Nan", "Nan"
+            
+            u_i_peak = [np.square((2 * curr_valleys[i]) / np.square(curr_peaks[i] + curr_valleys[i]) * u_current) for i in range(len(peaks))]
+            u_i_valley = [np.square((2 * curr_peaks[i]) / np.square(curr_peaks[i] + curr_valleys[i]) * u_current) for i in range(len(peaks))]
+
+            type_b = np.sum([np.sqrt(u_i_peak + u_i_valley) for i in range(len(peaks))])
+
+            u_contrast = np.sqrt(np.square(normal_type_a_unc(contrast)) + type_b / np.square(len(contrast)))
+            contrast = [np.mean(contrast), u_contrast]
+            return energy, contrast, curr_peaks[-2]
+        return energy, "Nan", "Nan"
+    return "Nan", "Nan", "Nan"
 
 def main():
     # get all files in the directory
@@ -183,43 +193,98 @@ def main():
     fig, axs = plt.subplots()
     fig_diff, axs_diff = plt.subplots()
     fig_contrast, axs_contrast = plt.subplots()
-    ax_3d = plt.figure().add_subplot(projection='3d')
+    fig_sig_con, axs_sig_con = plt.subplots()
+    fig_peaks, axs_peaks = plt.subplots()
+    fig_3d = plt.figure()
+    ax_3d = fig_3d.add_subplot(projection='3d')
 
     rev_bias_contrast_li = []
+    rev_bias_energy_li = []
     contrast_li = []
     u_contrast_li = []
     energy_li = []
     u_energy_li = []
+    curr_peaks_li = []
+    diff_li = [[],[],[],[],[]]
 
     for i in onlyfiles:
         # get the rev bias from one of the filenames
         split = i.split("_")
         rev_bias = float(split[-2])
         voltages, currents = csv_read(i)
-        energy, contrast = single_evaluation(voltages, currents, axs, rev_bias, ax_3d)
+        energy, contrast, curr_peak = single_evaluation(voltages, currents, axs, rev_bias, ax_3d)
         if energy != "Nan":
             energy_li.append(energy[0])
             u_energy_li.append(energy[1])
-            axs_diff.errorbar(rev_bias, energy[0], yerr = energy[1], capsize = 3, fmt = "o", label = f"{round(rev_bias,2)} A") #xerr = 0.5 * (2 * np.sqrt(6)),
+            rev_bias_energy_li.append(rev_bias)
+            for i in energy[2]:
+                diff_li[energy[2].index(i)].append(i)
         if contrast != "Nan":
             rev_bias_contrast_li.append(rev_bias)
             contrast_li.append(contrast[0])
             u_contrast_li.append(contrast[1])
+            curr_peaks_li.append(curr_peak)
 
     e_mean, u_e_mean = weigted_type_a_unc(energy_li, u_energy_li)
     print(e_mean)
     print(u_e_mean)
 
-    axs_contrast.errorbar(rev_bias_contrast_li, contrast_li, yerr = u_contrast_li, fmt = "o", capsize = 3)
+    diffs_li = []
+    u_diffs_li = []
 
+    for i in diff_li:
+        unc = normal_type_a_unc(i)
+        diffs_li.append(np.mean(i))
+        u_diffs_li.append(unc)
+
+    axs_peaks.errorbar(range(len(diffs_li)), diffs_li, yerr = u_diffs_li, capsize = 3, fmt = "o")
+
+    u_rev_bias_energy = [u_voltage(i) for i in rev_bias_energy_li]
+    u_rev_bias_contrast = [u_voltage(i) for i in rev_bias_contrast_li]
+
+    axs_diff.errorbar(rev_bias_energy_li, energy_li, xerr = u_rev_bias_energy, yerr = u_energy_li, capsize = 3, fmt = "o")
+    axs_contrast.errorbar(rev_bias_contrast_li, contrast_li, xerr = u_rev_bias_contrast, yerr = u_contrast_li, fmt = "o", capsize = 3)
+    axs_sig_con.errorbar(contrast_li, curr_peaks_li, xerr = u_contrast_li, yerr = u_current, fmt = "o", capsize = 3)
+
+    # Source - https://realpython.com/python-rounding/#rounding-up
+    # By DevCademy Media Inc. DBA Real Python
+    # Retrieved 2026-01-14, usage is allowed only non commercially
+    #import math
+    # ...
+    #def round_up(n, decimals=0):
+    #   multiplier = 10**decimals
+    #   return math.ceil(n * multiplier) / multiplier
+
+    def round_up(n, decimals = 0):
+        multiplier = 10**decimals
+        return math.ceil(n * multiplier) / multiplier
+
+    
+    if min(rev_bias_energy_li) == 0: u_rev_min = np.nan
+    else: u_rev_min = round_up(100 * min(u_rev_bias_energy) / min(rev_bias_energy_li), 4)
+    if max(rev_bias_energy_li) == 0: u_rev_max = np.nan
+    else: u_rev_max = round_up(100 * max(u_rev_bias_energy) / max(rev_bias_energy_li), 4)
+
+    print(rf"\(U_\text{{G}}\)& Gegenspannung & \(({round(min(rev_bias_energy_li), 4):n}\cdots{round(max(rev_bias_energy_li), 4):n})~\text{{V}}\)& GFG: Gl.~\ref{{eq:u_}} & \(({round_up(min(u_rev_bias_energy), 4):n}\cdots{round_up(max(u_rev_bias_energy), 4):n})~\text{{V}}\) & \(({u_rev_min:n}\cdots{u_rev_max:n})~\%\) \\")
+    print(rf"\(E\)& Übergangsenergie & \({round(e_mean, 4):n}~\text{{eV}}\)& Typ A: \(n={len(energy_li)}\) & \({round_up(u_e_mean, 4):n}~\text{{eV}}\) & \({round_up(100 * u_e_mean / e_mean, 4):n}~\%\) \\")
+    
     # edit style for plots
-    axs.legend(ncol = 5, fontsize = 4)
+    axs.legend(ncol = 5, fontsize = 3.5)
     axs.grid()
     axs.set_xlabel(r'Kinetische Energie $E$ [eV]')
     axs.set_ylabel(r'Spannung $U$ [mV]')
     axs.set_title(rf'Alle Messungen')
+    axs.ticklabel_format(style='sci', axis='y', scilimits=(0,0)) # credit below
     if test_phase == False: # save figure
-        fig.savefig(fname = rf"Alle_Messungen_v1.pdf", format = "pdf")
+        fig.savefig(fname = rf"Messung_alle_v1.pdf", format = "pdf")
+
+    axs_peaks.grid()
+    axs_peaks.set_xlabel(r'Peak')
+    axs_peaks.set_ylabel(r'Übergangsenergie $E$ [eV]')
+    axs_peaks.set_title(rf'Übergangsenergie für unterschiedliche Peaks')
+    axs_peaks.xaxis.set_ticks(range(len(diffs_li)))
+    if test_phase == False: # save figure
+        fig_peaks.savefig(fname = rf"Messung_peak_E_v1.pdf", format = "pdf")
 
     axs_contrast.grid()
     axs_contrast.set_xlabel(r'Gegenspannung $U_G$ [V]')
@@ -227,6 +292,15 @@ def main():
     axs_contrast.set_title(rf'Kontrast gegen Gegenspannung')
     if test_phase == False: # save figure
         fig_contrast.savefig(fname = rf"Messung_contrast_v1.pdf", format = "pdf")
+    
+    axs_sig_con.grid()
+    axs_sig_con.set_xlabel(r'Kontrast $K$ []')
+    axs_sig_con.set_ylabel(r'Signalstärke $U_S$ [mV]')
+    axs_sig_con.set_title(rf'Kontrast gegen Signalstärke')
+    axs_sig_con.ticklabel_format(style='sci', axis='y', scilimits=(0,0)) # credit below
+    axs_sig_con.set_yscale("log")
+    if test_phase == False: # save figure
+        fig_sig_con.savefig(fname = rf"Messung_signal_strength_contrast_v1.pdf", format = "pdf")
 
     axs_diff.grid()
     axs_diff.set_xlabel(r'Gegenspannung $U_G$ [V]')
@@ -235,6 +309,24 @@ def main():
     if test_phase == False: # save figure
         fig_diff.savefig(fname = rf"Messung_energy_v1.pdf", format = "pdf")
         
+    ax_3d.view_init(elev = 52, azim = 165, roll = -103)
+    ax_3d.autoscale_view(tight = True)
+    ax_3d.set_xlabel(r'Kinetische Energie $E$ [eV]')
+    ax_3d.set_ylabel(r'Spannung $U$ [mV]')
+    ax_3d.set_zlabel(r'Gegenspannung $U_G$ [V]')
+    ax_3d.set_title(r'Kinetische Energie und Spannung gegen Gegenspannung')
+    
+    # Source - https://stackoverflow.com/a
+    # Posted by Chris
+    # Retrieved 2026-01-28, License - CC BY-SA 3.0
+
+    # import matplotlib.pyplot as plt
+    # ...
+    # plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
+
+    ax_3d.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+    if test_phase == False: # save figure
+        fig_3d.savefig(fname = rf"Messung_3d_v1.pdf", format = "pdf")
     plt.show()
     
 
