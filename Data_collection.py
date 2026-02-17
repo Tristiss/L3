@@ -2,7 +2,6 @@ import time
 import threading
 import serial
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 from tinkerforge.bricklet_analog_in_v3 import BrickletAnalogInV3
 
@@ -27,8 +26,6 @@ def set_voltage(ser, volt):
         time.sleep(9)
 
 def main():
-    fig, axs = plt.subplots()
-
     ipcon, analog_in = methods.setup(UID_analog_in) # initiate IP connection with Tinkerforge Hardware
 
     # establish serial communication for both Manson devices
@@ -58,7 +55,6 @@ def main():
                     return None
             df = pd.DataFrame({"voltages": voltages[:len(data)], "currents": data})
             df.to_csv(fr"C:\Programmieren\Praktikum\L3\Data\Messung_rev_bias_{j}_{num}.csv", sep = ";")
-            axs.plot(df["voltages"], df["currents"])
             set_voltage(ser, 0)
 
     measure_thread = threading.Thread(target = measure)
@@ -72,8 +68,6 @@ def main():
         set_voltage(ser, 0)
     finally:
         methods.shut_down(ipcon, [ser, ser_reverse_bias])
-
-    plt.show()
 
 if __name__ == "__main__":
     main()
