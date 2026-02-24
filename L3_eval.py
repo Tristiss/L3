@@ -301,9 +301,6 @@ def main():
         return a * np.e**(-b * x)
     def rising_exp(x, a, b):
         return a * np.e**(b * x)
-    
-    def exp_intersect(x, a, b, c, d):
-        return falling_exp(x, a, b) - rising_exp(x, c, d)
 
     x = np.linspace(min(rev_bias_contrast_li), max(rev_bias_contrast_li), 10000)
 
@@ -391,7 +388,7 @@ def main():
     axs_best_con.legend(lines + lines2, labels + labels2)
     axs_best_con.set_xlabel(r'Gegenspannung $U_G$ [V]')
     axs_best_con.set_ylabel(r'Kontrast $K$ []')
-    axs_best_sig.set_ylabel(r'Signalstärke $U_S$ [mV]]')
+    axs_best_sig.set_ylabel(r'Signalstärke $U_S$ [mV]')
     axs_best_sig.ticklabel_format(style='sci', axis='y', scilimits=(0,0)) # credit below
     axs_best_con.set_title(rf'Kontrast und Signalstärke gegen Gegenspannung')
     if test_phase == False: # save figure
