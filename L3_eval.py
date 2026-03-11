@@ -5,10 +5,11 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
-from scipy.optimize import curve_fit, least_squares
+from scipy.optimize import curve_fit
 from scipy.interpolate import make_smoothing_spline
 from os import listdir
 from os.path import isfile, join
+from tqdm import tqdm
 
 # enable latex in plots
 mpl.rcParams['text.usetex'] = True
@@ -213,13 +214,12 @@ def single_evaluation(voltages:list[float], currents:list[float], axs, rev_bias:
         if len(peaks) == len(valleys):
             contrast = [(curr_peaks[i] - curr_valleys[i]) / (curr_peaks[i] + curr_valleys[i]) for i in range(len(peaks))]
             
-            u_i_peak = [np.square((2 * curr_valleys[i]) / np.square(curr_peaks[i] + curr_valleys[i]) * u_current) for i in range(len(peaks))]
-            u_i_valley = [np.square((2 * curr_peaks[i]) / np.square(curr_peaks[i] + curr_valleys[i]) * u_current) for i in range(len(peaks))]
+            u_peak = np.square((2 * curr_valleys[-2]) / np.square(curr_peaks[-2] + curr_valleys[-2]) * u_current)
+            u_valley = np.square((2 * curr_peaks[-2]) / np.square(curr_peaks[-2] + curr_valleys[-2]) * u_current)
 
-            type_b = np.sum([np.sqrt(u_i_peak + u_i_valley) for i in range(len(peaks))])
+            type_b = np.sqrt(u_peak + u_valley)
 
-            u_contrast = np.sqrt(np.square(normal_type_a_unc(contrast)) + type_b / np.square(len(contrast)))
-            contrast = [np.mean(contrast), u_contrast]
+            contrast = [contrast[-2], type_b]
             return energy, contrast, curr_peaks[-2]
         return energy, "Nan", "Nan"
     return "Nan", "Nan", "Nan"
@@ -236,8 +236,6 @@ def main():
     fig_sig, axs_sig = plt.subplots()
     fig_sig_con, axs_sig_con = plt.subplots()
     fig_peaks, axs_peaks = plt.subplots()
-    fig_best, axs_best_con = plt.subplots()
-    axs_best_sig = axs_best_con.twinx()
     fig_3d = plt.figure()
     ax_3d = fig_3d.add_subplot(projection='3d')
 
@@ -250,7 +248,7 @@ def main():
     curr_peaks_li = []
     diff_li = [[],[],[],[],[]]
 
-    for i in onlyfiles:
+    for i in tqdm(onlyfiles, colour = "#20C20E"):
         # get the rev bias from one of the filenames
         split = i.split("_")
         rev_bias = float(split[-2])
@@ -283,7 +281,7 @@ def main():
     peaks = range(len(diffs_li))
 
     p = np.polyfit(peaks, diffs_li, 1)
-    print(f"Exp Fit results (e peak): {p}")
+    print(f"Lin Fit results (e peak): {p}")
 
     x = np.linspace(min(peaks), max(peaks), 10000)
     y = [p[1] + p[0] * i for i in x]
@@ -304,26 +302,31 @@ def main():
 
     x = np.linspace(min(rev_bias_contrast_li), max(rev_bias_contrast_li), 10000)
 
-    popt_con, pcov = curve_fit(rising_exp, rev_bias_contrast_li, contrast_li)
-    print(f"Exp Fit results (con rev): {popt_con}")
+    p = np.polyfit(rev_bias_contrast_li, contrast_li, 1)
+    print(f"Lin Fit results (e peak): {p}")
 
-    y = [rising_exp(i, popt_con[0], popt_con[1]) for i in x]
+    y = [p[1] + p[0] * i for i in x]
 
     popt_sig, pcov = curve_fit(falling_exp, rev_bias_contrast_li, curr_peaks_li)
 
     yy = [falling_exp(i, popt_sig[0], popt_sig[1]) for i in x]
 
-    axs_best_con.plot(x, y, c = "#6100B0", label = "Kontrast")
-    axs_best_sig.plot(x, yy, c = "#ff9a00", label = "Signalstärke")
-
-    axs_contrast.plot(x, y, c = "#6100B0", label = "Exponetieller Fit")
+    axs_contrast.plot(x, y, c = "#6100B0", label = "Linearer Fit")
     axs_contrast.errorbar(rev_bias_contrast_li, contrast_li, xerr = u_rev_bias_contrast, yerr = u_contrast_li, label = "Messwerte",  **kwargs_wo_fmt)
 
     axs_sig.plot(x, yy, c = "#6100B0", label = "Exponetieller Fit")
     axs_sig.errorbar(rev_bias_contrast_li, curr_peaks_li, xerr = u_rev_bias_contrast, yerr = u_current, label = "Messwerte",  **kwargs)
 
+    x = np.linspace(min(rev_bias_energy_li), max(rev_bias_energy_li), 10000)
+
+    p = np.polyfit(rev_bias_energy_li, energy_li, 1)
+    print(f"Lin Fit results (e peak): {p}")
+
+    y = [p[1] + p[0] * i for i in x]
+
     axs_diff.errorbar(rev_bias_energy_li, energy_li, xerr = u_rev_bias_energy, yerr = u_energy_li, **kwargs_wo_fmt)
-    
+    axs_diff.plot(x, y, c = "#6100B0", label = "Linearer Fit")
+
     popt, pcov = curve_fit(falling_exp, contrast_li, curr_peaks_li)
     print(f"Exp Fit results (sig con): {popt}")
 
@@ -331,7 +334,7 @@ def main():
     y = [falling_exp(i, popt[0], popt[1]) for i in x]
 
     axs_sig_con.plot(x, y, c = "#6100B0", label = "Exponetieller Fit")
-    axs_sig_con.errorbar(contrast_li, curr_peaks_li, xerr = u_contrast_li, yerr = u_current, label = "Messwerte", **kwargs)
+    axs_sig_con.errorbar(contrast_li, curr_peaks_li, xerr = u_contrast_li, yerr = u_current, label = "Messwerte", **kwargs_wo_fmt)
 
     if min(rev_bias_energy_li) == 0: u_rev_min = np.nan
     else: u_rev_min = round_up(100 * min(u_rev_bias_energy) / min(rev_bias_energy_li), 4)
@@ -380,19 +383,6 @@ def main():
     # Source - https://stackoverflow.com/a/10129461
     # Posted by zgana, modified by community. See post 'Timeline' for change history
     # Retrieved 2026-02-17, License - CC BY-SA 4.0
-
-    lines, labels = axs_best_con.get_legend_handles_labels()
-    lines2, labels2 = axs_best_sig.get_legend_handles_labels()
-
-    axs_best_con.grid()
-    axs_best_con.legend(lines + lines2, labels + labels2)
-    axs_best_con.set_xlabel(r'Gegenspannung $U_G$ [V]')
-    axs_best_con.set_ylabel(r'Kontrast $K$ []')
-    axs_best_sig.set_ylabel(r'Signalstärke $U_S$ [mV]')
-    axs_best_sig.ticklabel_format(style='sci', axis='y', scilimits=(0,0)) # credit below
-    axs_best_con.set_title(rf'Kontrast und Signalstärke gegen Gegenspannung')
-    if test_phase == False: # save figure
-        fig_best.savefig(fname = rf"Messung_sig_con_rev_bias_v1.pdf", format = "pdf")
     
     axs_sig_con.grid()
     axs_sig_con.legend()
