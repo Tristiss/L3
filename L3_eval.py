@@ -333,7 +333,7 @@ def main():
     x = np.linspace(min(contrast_li), max(contrast_li), 10000)
     y = [falling_exp(i, popt[0], popt[1]) for i in x]
 
-    axs_sig_con.plot(x, y, c = "#6100B0", label = "Exponetieller Fit")
+    #axs_sig_con.plot(x, y, c = "#6100B0", label = "Exponetieller Fit")
     axs_sig_con.errorbar(contrast_li, curr_peaks_li, xerr = u_contrast_li, yerr = u_current, label = "Messwerte", **kwargs_wo_fmt)
 
     if min(rev_bias_energy_li) == 0: u_rev_min = np.nan

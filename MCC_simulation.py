@@ -26,12 +26,12 @@ det_max_z = 1e-02 # m
 
 runs = 1
 
-voltages = np.linspace(20, 50, 100) # V
+voltages = [20] # np.linspace(20, 50, 100) # V
 
 sigma = np.square(b_max) * np.pi
 n = 2.6e20 # 1 / m^3
 
-electrons_per_sim = 200
+electrons_per_sim = 40
 
 def kinetic_energy(vel:np.ndarray):
     return 0.5 * c.electron_mass * np.square(np.linalg.norm(vel))
@@ -79,8 +79,8 @@ def field_acc(voltage:float, thickness:float):
 def single_particle_verlet(voltage:float, counter:int):
     time = 0
     pos = np.array([0, random.uniform(min_y / 4, max_z / 4), random.uniform(min_z / 4, max_z / 4)])
-    vel = np.array([random.normal(0, 1e05), random.normal(0, 1e05), random.normal(0, 1e05)]) # 0, random.uniform(-1, 1) * 5e06, random.uniform(-1, 1) * 5e06])
-
+    vel = np.array([0, random.uniform(-1, 1) * 1e05, random.uniform(-1, 1) * 1e05]) # random.normal(0, 1e05), random.normal(0, 1e05), random.normal(0, 1e05)]) # 0, random.uniform(-1, 1) * 5e06, random.uniform(-1, 1) * 5e06])
+    
     acc = field_acc(voltage, thickness)
 
     datax = []
@@ -138,7 +138,7 @@ def main():
     for i in range(runs):
         sweep(i)
 
-    """ax = plt.figure().add_subplot(projection='3d')
+    ax = plt.figure().add_subplot(projection='3d')
 
     for i in range(len(pos_x_db)):
         ax.plot(pos_x_db[i], pos_y_db[i], pos_z_db[i])
@@ -152,7 +152,7 @@ def main():
     ax.set_zlim(min_z, max_z)
     ax.set_xlabel("x")
     ax.set_ylabel("y")
-    ax.set_zlabel("z")"""
+    ax.set_zlabel("z")
 
 if __name__ == "__main__":
     main()
